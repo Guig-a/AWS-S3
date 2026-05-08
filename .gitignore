@@ -1,0 +1,29 @@
+# Dependências e build
+/node_modules
+/dist
+/build
+/coverage
+*.tsbuildinfo
+
+# Variáveis de ambiente 
+.env.*
+!.env.example
+.ENV
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# SO
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE / editor
+.idea/
+.vscode/
+*.swp
+*.swo

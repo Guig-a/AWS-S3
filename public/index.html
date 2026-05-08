@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>S3 · Upload e URL pré-assinada</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #0f1419;
+        --surface: #1a2332;
+        --border: #2d3a4d;
+        --text: #e8eef5;
+        --muted: #8b9cad;
+        --accent: #4da3ff;
+        --danger: #ff6b6b;
+        --ok: #6bcf7f;
+      }
+      @media (prefers-color-scheme: light) {
+        :root {
+          --bg: #f4f6f9;
+          --surface: #ffffff;
+          --border: #d8dee8;
+          --text: #1a2332;
+          --muted: #5c6b7e;
+          --accent: #0d6efd;
+          --danger: #d63333;
+          --ok: #198754;
+        }
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+        background: var(--bg);
+        color: var(--text);
+        line-height: 1.5;
+        padding: 2rem 1rem;
+      }
+      main {
+        max-width: 36rem;
+        margin: 0 auto;
+      }
+      h1 {
+        font-size: 1.35rem;
+        font-weight: 650;
+        margin: 0 0 0.25rem;
+      }
+      .subtitle {
+        color: var(--muted);
+        font-size: 0.9rem;
+        margin: 0 0 1.75rem;
+      }
+      section {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 1.25rem;
+        margin-bottom: 1rem;
+      }
+      section h2 {
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--muted);
+        margin: 0 0 0.75rem;
+        font-weight: 600;
+      }
+      label {
+        display: block;
+        font-size: 0.875rem;
+        margin-bottom: 0.35rem;
+      }
+      input[type='text'],
+      input[type='file'] {
+        width: 100%;
+        padding: 0.55rem 0.65rem;
+        border-radius: 8px;
+        border: 1px solid var(--border);
+        background: var(--bg);
+        color: var(--text);
+        font-size: 0.9rem;
+      }
+      input[type='file'] {
+        padding: 0.45rem;
+      }
+      .row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        align-items: center;
+        margin-top: 0.75rem;
+      }
+      button {
+        cursor: pointer;
+        border: none;
+        border-radius: 8px;
+        padding: 0.55rem 1rem;
+        font-size: 0.9rem;
+        font-weight: 600;
+        background: var(--accent);
+        color: #fff;
+      }
+      button:disabled {
+        opacity: 0.55;
+        cursor: not-allowed;
+      }
+      button.secondary {
+        background: transparent;
+        color: var(--accent);
+        border: 1px solid var(--accent);
+      }
+      .msg {
+        margin-top: 0.75rem;
+        font-size: 0.875rem;
+        padding: 0.5rem 0.65rem;
+        border-radius: 8px;
+        word-break: break-word;
+      }
+      .msg.error {
+        background: color-mix(in srgb, var(--danger) 18%, transparent);
+        color: var(--danger);
+      }
+      .msg.success {
+        background: color-mix(in srgb, var(--ok) 18%, transparent);
+        color: var(--ok);
+      }
+      .msg.info {
+        background: color-mix(in srgb, var(--accent) 14%, transparent);
+        color: var(--text);
+      }
+      .link-box {
+        margin-top: 0.75rem;
+      }
+      .link-box a {
+        color: var(--accent);
+      }
+      .hint {
+        font-size: 0.875rem;
+        color: var(--muted);
+        margin: 0 0 0.75rem;
+        line-height: 1.45;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Upload S3</h1>
+      <p class="subtitle">
+        Envie um arquivo e gere uma URL pré-assinada (válida ~2&nbsp;min) sempre que precisar visualizar.
+      </p>
+
+      <section aria-labelledby="upload-heading">
+        <h2 id="upload-heading">1 · Enviar arquivo</h2>
+        <label for="file">Arquivo</label>
+        <input id="file" type="file" />
+        <div class="row">
+          <button type="button" id="btn-upload">Enviar</button>
+        </div>
+        <div id="upload-msg" class="msg" hidden></div>
+      </section>
+
+      <section aria-labelledby="url-heading">
+        <h2 id="url-heading">2 · Gerar URL pré-assinada</h2>
+        <label for="key">Key no bucket</label>
+        <input id="key" type="text" placeholder="uploads/uuid.ext" autocomplete="off" />
+        <div class="row">
+          <button type="button" id="btn-url" class="secondary" disabled>
+            Gerar link para abrir
+          </button>
+        </div>
+        <div id="url-msg" class="msg" hidden></div>
+        <div id="url-link" class="link-box" hidden></div>
+      </section>
+    </main>
+
+    <script>
+      const $ = (id) => document.getElementById(id);
+
+      /** Key do último upload bem-sucedido (só em memória; some se recarregares a página). */
+      let uploadedKey = '';
+
+      function showMsg(el, text, kind) {
+        el.hidden = false;
+        el.textContent = text;
+        el.className = 'msg ' + (kind || 'info');
+      }
+
+      function hideMsg(el) {
+        el.hidden = true;
+        el.textContent = '';
+      }
+
+      $('btn-upload').addEventListener('click', async () => {
+        const input = $('file');
+        const msg = $('upload-msg');
+        hideMsg(msg);
+
+        if (!input.files?.length) {
+          showMsg(msg, 'Escolha um arquivo antes de enviar.', 'error');
+          return;
+        }
+
+        const fd = new FormData();
+        fd.append('file', input.files[0]);
+
+        const btn = $('btn-upload');
+        const btnUrl = $('btn-url');
+        btn.disabled = true;
+        btnUrl.disabled = true;
+
+        try {
+          const res = await fetch('/upload', { method: 'POST', body: fd });
+          const data = await res.json().catch(() => ({}));
+
+          if (!res.ok) {
+            const detail =
+              typeof data.message === 'string'
+                ? data.message
+                : Array.isArray(data.message)
+                  ? data.message.map((m) => m.constraints && Object.values(m.constraints)).flat().filter(Boolean).join(' ')
+                  : res.statusText;
+            showMsg(msg, 'Erro no upload: ' + (detail || res.status), 'error');
+            btnUrl.disabled = !uploadedKey;
+            return;
+          }
+
+          uploadedKey = typeof data.key === 'string' ? data.key : '';
+          hideMsg($('url-msg'));
+          $('url-link').hidden = true;
+          $('url-link').innerHTML = '';
+
+          if (!uploadedKey) {
+            showMsg(msg, 'Resposta estranha do servidor (sem key).', 'error');
+            btnUrl.disabled = true;
+            return;
+          }
+
+          showMsg(msg, 'Arquivo enviado. Para ver, gere o link abaixo.', 'success');
+          btnUrl.disabled = false;
+        } catch (e) {
+          showMsg(msg, 'Falha na rede ou no servidor.', 'error');
+          btnUrl.disabled = !uploadedKey;
+        } finally {
+          btn.disabled = false;
+        }
+      });
+
+      $('btn-url').addEventListener('click', async () => {
+        const key = uploadedKey;
+        const msg = $('url-msg');
+        const linkBox = $('url-link');
+        hideMsg(msg);
+        linkBox.hidden = true;
+        linkBox.innerHTML = '';
+
+        if (!key) {
+          showMsg(msg, 'Envia um arquivo primeiro.', 'error');
+          return;
+        }
+
+        const btn = $('btn-url');
+        btn.disabled = true;
+
+        try {
+          const res = await fetch('/upload/url?key=' + encodeURIComponent(key));
+          const data = await res.json().catch(() => ({}));
+
+          if (!res.ok) {
+            const detail = typeof data.message === 'string' ? data.message : res.statusText;
+            showMsg(msg, 'Erro ao gerar URL: ' + (detail || res.status), 'error');
+            return;
+          }
+
+          const seconds = data.expiresInSeconds ?? 120;
+          showMsg(msg, 'Link válido por ~' + seconds + ' s. Usa o botão abaixo.', 'success');
+
+          const a = document.createElement('a');
+          a.href = data.url;
+          a.target = '_blank';
+          a.rel = 'noopener noreferrer';
+          a.textContent = 'Abrir arquivo no S3';
+          linkBox.appendChild(a);
+          linkBox.hidden = false;
+        } catch (e) {
+          showMsg(msg, 'Falha na rede ou no servidor.', 'error');
+        } finally {
+          btn.disabled = false;
+        }
+      });
+    </script>
+  </body>
+</html>
