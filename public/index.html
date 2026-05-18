@@ -138,6 +138,39 @@
       .link-box a {
         color: var(--accent);
       }
+      .stack {
+        display: grid;
+        gap: 0.75rem;
+      }
+      .inline-fields {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));
+        gap: 0.75rem;
+      }
+      .card-list {
+        display: grid;
+        gap: 0.75rem;
+        margin-top: 1rem;
+      }
+      .file-card {
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 0.9rem;
+        background: color-mix(in srgb, var(--surface) 88%, var(--bg));
+      }
+      .file-card strong {
+        display: block;
+        margin-bottom: 0.2rem;
+      }
+      .meta {
+        color: var(--muted);
+        font-size: 0.85rem;
+      }
+      .empty {
+        color: var(--muted);
+        font-size: 0.9rem;
+        margin-top: 0.5rem;
+      }
       .hint {
         font-size: 0.875rem;
         color: var(--muted);
@@ -150,7 +183,7 @@
     <main>
       <h1>Upload S3</h1>
       <p class="subtitle">
-        Envie um arquivo e gere uma URL pré-assinada (válida ~2&nbsp;min) sempre que precisar visualizar.
+        Envie arquivos para o S3, registre no banco e gerencie tudo por aqui com listagem, filtro, paginação e exclusão.
       </p>
 
       <section aria-labelledby="upload-heading">
@@ -175,13 +208,41 @@
         <div id="url-msg" class="msg" hidden></div>
         <div id="url-link" class="link-box" hidden></div>
       </section>
+
+      <section aria-labelledby="list-heading">
+        <h2 id="list-heading">3 · Listar arquivos</h2>
+        <p class="hint">
+          Filtra por categoria (`image`) ou por MIME type completo (`application/pdf`) e navega pelos registros salvos no banco.
+        </p>
+        <div class="stack">
+          <div class="inline-fields">
+            <div>
+              <label for="filter-type">Tipo</label>
+              <input id="filter-type" type="text" placeholder="image ou application/pdf" autocomplete="off" />
+            </div>
+            <div>
+              <label for="page">Página</label>
+              <input id="page" type="text" value="1" inputmode="numeric" />
+            </div>
+            <div>
+              <label for="limit">Limite</label>
+              <input id="limit" type="text" value="10" inputmode="numeric" />
+            </div>
+          </div>
+          <div class="row">
+            <button type="button" id="btn-list" class="secondary">Atualizar lista</button>
+          </div>
+        </div>
+        <div id="list-msg" class="msg" hidden></div>
+        <div id="list-meta" class="hint" hidden></div>
+        <div id="files" class="card-list"></div>
+      </section>
     </main>
 
     <script>
       const $ = (id) => document.getElementById(id);
-
-      /** Key do último upload bem-sucedido (só em memória; some se recarregares a página). */
       let uploadedKey = '';
+      let uploadedId = '';
 
       function showMsg(el, text, kind) {
         el.hidden = false;
@@ -192,6 +253,219 @@
       function hideMsg(el) {
         el.hidden = true;
         el.textContent = '';
+      }
+
+      function getErrorDetail(data, fallback) {
+        if (typeof data?.message === 'string') {
+          return data.message;
+        }
+
+        if (Array.isArray(data?.message)) {
+          return data.message.join(' ');
+        }
+
+        return fallback;
+      }
+
+      function setKeyValue(key) {
+        uploadedKey = key || '';
+        $('key').value = uploadedKey;
+        $('btn-url').disabled = !uploadedKey;
+      }
+
+      function formatBytes(bytes) {
+        if (typeof bytes !== 'number' || Number.isNaN(bytes)) {
+          return '-';
+        }
+        if (bytes < 1024) {
+          return bytes + ' B';
+        }
+        if (bytes < 1024 * 1024) {
+          return (bytes / 1024).toFixed(1) + ' KB';
+        }
+        return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+      }
+
+      function renderLink(url) {
+        const linkBox = $('url-link');
+        linkBox.hidden = false;
+        linkBox.innerHTML = '';
+
+        const a = document.createElement('a');
+        a.href = url;
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
+        a.textContent = 'Abrir arquivo no S3';
+        linkBox.appendChild(a);
+      }
+
+      async function generateUrlFromKey(key) {
+        const msg = $('url-msg');
+        hideMsg(msg);
+        $('url-link').hidden = true;
+        $('url-link').innerHTML = '';
+
+        if (!key) {
+          showMsg(msg, 'Informa uma key válida primeiro.', 'error');
+          return;
+        }
+
+        const btn = $('btn-url');
+        btn.disabled = true;
+
+        try {
+          const res = await fetch('/upload/url?key=' + encodeURIComponent(key));
+          const data = await res.json().catch(() => ({}));
+
+          if (!res.ok) {
+            showMsg(msg, 'Erro ao gerar URL: ' + getErrorDetail(data, res.statusText), 'error');
+            return;
+          }
+
+          const seconds = data.expiresInSeconds ?? 120;
+          showMsg(msg, 'Link válido por ~' + seconds + ' s. Usa o botão abaixo.', 'success');
+          renderLink(data.url);
+        } catch (e) {
+          showMsg(msg, 'Falha na rede ou no servidor.', 'error');
+        } finally {
+          btn.disabled = !$('key').value.trim();
+        }
+      }
+
+      function createFileCard(file) {
+        const card = document.createElement('div');
+        card.className = 'file-card';
+
+        const title = document.createElement('strong');
+        title.textContent = file.originalName || '(sem nome)';
+        card.appendChild(title);
+
+        const meta = document.createElement('div');
+        meta.className = 'meta';
+        meta.textContent =
+          'Key: ' +
+          file.key +
+          ' | Tipo: ' +
+          file.mimeType +
+          ' | Tamanho: ' +
+          formatBytes(file.sizeBytes);
+        card.appendChild(meta);
+
+        const created = document.createElement('div');
+        created.className = 'meta';
+        created.textContent = 'Criado em: ' + new Date(file.createdAt).toLocaleString('pt-BR');
+        card.appendChild(created);
+
+        const row = document.createElement('div');
+        row.className = 'row';
+
+        const openBtn = document.createElement('button');
+        openBtn.type = 'button';
+        openBtn.className = 'secondary';
+        openBtn.textContent = 'Gerar link';
+        openBtn.addEventListener('click', async () => {
+          setKeyValue(file.key);
+          await generateUrlFromKey(file.key);
+        });
+
+        const deleteBtn = document.createElement('button');
+        deleteBtn.type = 'button';
+        deleteBtn.textContent = 'Excluir';
+        deleteBtn.addEventListener('click', async () => {
+          const confirmed = window.confirm('Excluir o arquivo "' + file.originalName + '"?');
+          if (!confirmed) {
+            return;
+          }
+
+          deleteBtn.disabled = true;
+          try {
+            const res = await fetch('/upload?key=' + encodeURIComponent(file.key), {
+              method: 'DELETE',
+            });
+            const data = await res.json().catch(() => ({}));
+
+            if (!res.ok) {
+              showMsg($('list-msg'), 'Erro ao excluir: ' + getErrorDetail(data, res.statusText), 'error');
+              return;
+            }
+
+            if (uploadedKey === file.key) {
+              setKeyValue('');
+              uploadedId = '';
+              hideMsg($('url-msg'));
+              $('url-link').hidden = true;
+              $('url-link').innerHTML = '';
+            }
+
+            showMsg($('list-msg'), 'Arquivo excluído com sucesso.', 'success');
+            await refreshList();
+          } catch (e) {
+            showMsg($('list-msg'), 'Falha na rede ou no servidor.', 'error');
+          } finally {
+            deleteBtn.disabled = false;
+          }
+        });
+
+        row.appendChild(openBtn);
+        row.appendChild(deleteBtn);
+        card.appendChild(row);
+
+        return card;
+      }
+
+      async function refreshList() {
+        const type = $('filter-type').value.trim();
+        const page = $('page').value.trim() || '1';
+        const limit = $('limit').value.trim() || '10';
+        const listMsg = $('list-msg');
+        const listMeta = $('list-meta');
+        const filesEl = $('files');
+        const btn = $('btn-list');
+
+        hideMsg(listMsg);
+        listMeta.hidden = true;
+        listMeta.textContent = '';
+        filesEl.innerHTML = '';
+        btn.disabled = true;
+
+        const params = new URLSearchParams();
+        if (type) params.set('type', type);
+        params.set('page', page);
+        params.set('limit', limit);
+
+        try {
+          const res = await fetch('/upload/files?' + params.toString());
+          const data = await res.json().catch(() => ({}));
+
+          if (!res.ok) {
+            showMsg(listMsg, 'Erro ao listar: ' + getErrorDetail(data, res.statusText), 'error');
+            return;
+          }
+
+          const items = Array.isArray(data.items) ? data.items : [];
+          listMeta.hidden = false;
+          listMeta.textContent =
+            'Página ' +
+            data.page +
+            ' de ' +
+            data.totalPages +
+            ' | total: ' +
+            data.total +
+            ' arquivo(s)';
+
+          if (!items.length) {
+            filesEl.innerHTML = '<p class="empty">Nenhum arquivo encontrado para este filtro.</p>';
+            return;
+          }
+
+          items.forEach((file) => {
+            filesEl.appendChild(createFileCard(file));
+          });
+        } catch (e) {
+          showMsg(listMsg, 'Falha na rede ou no servidor.', 'error');
+        } finally {
+          btn.disabled = false;
+        }
       }
 
       $('btn-upload').addEventListener('click', async () => {
@@ -208,89 +482,56 @@
         fd.append('file', input.files[0]);
 
         const btn = $('btn-upload');
-        const btnUrl = $('btn-url');
         btn.disabled = true;
-        btnUrl.disabled = true;
+        $('btn-url').disabled = true;
 
         try {
           const res = await fetch('/upload', { method: 'POST', body: fd });
           const data = await res.json().catch(() => ({}));
 
           if (!res.ok) {
-            const detail =
-              typeof data.message === 'string'
-                ? data.message
-                : Array.isArray(data.message)
-                  ? data.message.map((m) => m.constraints && Object.values(m.constraints)).flat().filter(Boolean).join(' ')
-                  : res.statusText;
-            showMsg(msg, 'Erro no upload: ' + (detail || res.status), 'error');
-            btnUrl.disabled = !uploadedKey;
+            showMsg(msg, 'Erro no upload: ' + getErrorDetail(data, res.statusText), 'error');
+            $('btn-url').disabled = !uploadedKey;
             return;
           }
 
-          uploadedKey = typeof data.key === 'string' ? data.key : '';
+          setKeyValue(typeof data.key === 'string' ? data.key : '');
+          uploadedId = typeof data.id === 'string' ? data.id : '';
           hideMsg($('url-msg'));
           $('url-link').hidden = true;
           $('url-link').innerHTML = '';
 
           if (!uploadedKey) {
             showMsg(msg, 'Resposta estranha do servidor (sem key).', 'error');
-            btnUrl.disabled = true;
+            $('btn-url').disabled = true;
             return;
           }
 
-          showMsg(msg, 'Arquivo enviado. Para ver, gere o link abaixo.', 'success');
-          btnUrl.disabled = false;
+          showMsg(
+            msg,
+            'Arquivo enviado com sucesso. ID: ' + uploadedId + ' | key pronta para visualizar.',
+            'success',
+          );
+          await refreshList();
         } catch (e) {
           showMsg(msg, 'Falha na rede ou no servidor.', 'error');
-          btnUrl.disabled = !uploadedKey;
+          $('btn-url').disabled = !uploadedKey;
         } finally {
           btn.disabled = false;
         }
       });
 
       $('btn-url').addEventListener('click', async () => {
-        const key = uploadedKey;
-        const msg = $('url-msg');
-        const linkBox = $('url-link');
-        hideMsg(msg);
-        linkBox.hidden = true;
-        linkBox.innerHTML = '';
-
-        if (!key) {
-          showMsg(msg, 'Envia um arquivo primeiro.', 'error');
-          return;
-        }
-
-        const btn = $('btn-url');
-        btn.disabled = true;
-
-        try {
-          const res = await fetch('/upload/url?key=' + encodeURIComponent(key));
-          const data = await res.json().catch(() => ({}));
-
-          if (!res.ok) {
-            const detail = typeof data.message === 'string' ? data.message : res.statusText;
-            showMsg(msg, 'Erro ao gerar URL: ' + (detail || res.status), 'error');
-            return;
-          }
-
-          const seconds = data.expiresInSeconds ?? 120;
-          showMsg(msg, 'Link válido por ~' + seconds + ' s. Usa o botão abaixo.', 'success');
-
-          const a = document.createElement('a');
-          a.href = data.url;
-          a.target = '_blank';
-          a.rel = 'noopener noreferrer';
-          a.textContent = 'Abrir arquivo no S3';
-          linkBox.appendChild(a);
-          linkBox.hidden = false;
-        } catch (e) {
-          showMsg(msg, 'Falha na rede ou no servidor.', 'error');
-        } finally {
-          btn.disabled = false;
-        }
+        await generateUrlFromKey($('key').value.trim() || uploadedKey);
       });
+
+      $('btn-list').addEventListener('click', refreshList);
+      $('key').addEventListener('input', (event) => {
+        const value = event.target.value.trim();
+        $('btn-url').disabled = !value;
+      });
+
+      refreshList();
     </script>
   </body>
 </html>
