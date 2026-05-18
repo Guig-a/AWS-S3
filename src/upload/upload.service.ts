@@ -83,8 +83,16 @@ export class UploadService {
     }
   }
 
-  async listFiles(): Promise<StoredFile[]> {
+  async listFiles(type?: string): Promise<StoredFile[]> {
+    const normalizedType = type?.toLowerCase();
+    const where = normalizedType
+      ? normalizedType.includes('/')
+        ? { mimeType: normalizedType }
+        : { mimeType: { startsWith: `${normalizedType}/` } }
+      : undefined;
+
     const assets = await this.prisma.fileAsset.findMany({
+      ...(where ? { where } : {}),
       orderBy: {
         createdAt: 'desc',
       },

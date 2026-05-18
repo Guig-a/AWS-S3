@@ -26,8 +26,8 @@ export class UploadController {
   }
 
   @Get('files')
-  async listFiles() {
-    return this.uploadService.listFiles();
+  async listFiles(@Query('type') type?: string) {
+    return this.uploadService.listFiles(type?.trim() || undefined);
   }
 
   @Get('url')

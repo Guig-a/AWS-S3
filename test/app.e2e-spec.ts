@@ -75,6 +75,21 @@ describe('Upload API (e2e)', () => {
     });
   });
 
+  it('GET /upload/files?type=image filtra por categoria de MIME type', async () => {
+    await request(app.getHttpServer()).get('/upload/files').query({ type: 'image' }).expect(200);
+
+    expect(prismaMock.fileAsset.findMany).toHaveBeenCalledWith({
+      where: {
+        mimeType: {
+          startsWith: 'image/',
+        },
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+    });
+  });
+
   it('DELETE /upload remove arquivo do S3 e do banco', async () => {
     const asset = {
       id: 'file-1',
