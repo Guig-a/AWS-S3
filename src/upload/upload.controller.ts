@@ -20,8 +20,13 @@ export class UploadController {
     if (!file) {
       throw new BadRequestException('Envie o arquivo no campo "file" (multipart/form-data).');
     }
-    const key = await this.uploadService.upload(file);
-    return { key };
+    const storedFile = await this.uploadService.upload(file);
+    return { id: storedFile.id, key: storedFile.key };
+  }
+
+  @Get('files')
+  async listFiles() {
+    return this.uploadService.listFiles();
   }
 
   @Get('url')
@@ -29,7 +34,7 @@ export class UploadController {
     if (!key?.trim()) {
       throw new BadRequestException('Informe o query param "key" (ex.: uploads/uuid.pdf).');
     }
-    const url = await this.uploadService.getPresignedUrl(key);
+    const url = await this.uploadService.getPresignedUrl(key.trim());
     return { url, expiresIn: '2 minutos', expiresInSeconds: 120 };
   }
 }
