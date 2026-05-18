@@ -24,6 +24,14 @@ type StoredFile = {
   createdAt: Date;
 };
 
+type PaginatedFiles = {
+  items: StoredFile[];
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+};
+
 @Injectable()
 export class UploadService {
   private readonly client: S3Client;
@@ -83,22 +91,38 @@ export class UploadService {
     }
   }
 
-  async listFiles(type?: string): Promise<StoredFile[]> {
+  async listFiles(
+    type?: string,
+    page = 1,
+    limit = 10,
+  ): Promise<PaginatedFiles> {
     const normalizedType = type?.toLowerCase();
     const where = normalizedType
       ? normalizedType.includes('/')
         ? { mimeType: normalizedType }
         : { mimeType: { startsWith: `${normalizedType}/` } }
       : undefined;
+    const skip = (page - 1) * limit;
+    const total = await this.prisma.fileAsset.count({
+      ...(where ? { where } : {}),
+    });
 
     const assets = await this.prisma.fileAsset.findMany({
       ...(where ? { where } : {}),
       orderBy: {
         createdAt: 'desc',
       },
+      skip,
+      take: limit,
     });
 
-    return assets.map((asset) => this.toStoredFile(asset));
+    return {
+      items: assets.map((asset) => this.toStoredFile(asset)),
+      page,
+      limit,
+      total,
+      totalPages: Math.max(1, Math.ceil(total / limit)),
+    };
   }
 
   async getPresignedUrl(key: string): Promise<string> {

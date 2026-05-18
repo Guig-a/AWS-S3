@@ -26,8 +26,16 @@ export class UploadController {
   }
 
   @Get('files')
-  async listFiles(@Query('type') type?: string) {
-    return this.uploadService.listFiles(type?.trim() || undefined);
+  async listFiles(
+    @Query('type') type?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.uploadService.listFiles(
+      type?.trim() || undefined,
+      this.parsePositiveInt(page, 1, 'page'),
+      this.parsePositiveInt(limit, 10, 'limit'),
+    );
   }
 
   @Get('url')
@@ -47,5 +55,18 @@ export class UploadController {
 
     const deletedFile = await this.uploadService.deleteFile(key.trim());
     return { deleted: true, id: deletedFile.id, key: deletedFile.key };
+  }
+
+  private parsePositiveInt(value: string | undefined, fallback: number, field: string): number {
+    if (!value?.trim()) {
+      return fallback;
+    }
+
+    const parsed = Number.parseInt(value, 10);
+    if (!Number.isInteger(parsed) || parsed < 1) {
+      throw new BadRequestException(`O query param "${field}" deve ser um inteiro positivo.`);
+    }
+
+    return parsed;
   }
 }
