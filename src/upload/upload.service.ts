@@ -114,6 +114,33 @@ export class UploadService {
     });
   }
 
+  async deleteFile(key: string): Promise<StoredFile> {
+    const asset = await this.prisma.fileAsset.findUnique({
+      where: {
+        s3Key: key,
+      },
+    });
+
+    if (!asset) {
+      throw new NotFoundException('Arquivo não encontrado para a key informada.');
+    }
+
+    await this.client.send(
+      new DeleteObjectCommand({
+        Bucket: this.bucket,
+        Key: asset.s3Key,
+      }),
+    );
+
+    const deletedAsset = await this.prisma.fileAsset.delete({
+      where: {
+        s3Key: asset.s3Key,
+      },
+    });
+
+    return this.toStoredFile(deletedAsset);
+  }
+
   private toStoredFile(asset: {
     id: string;
     s3Key: string;

@@ -2,6 +2,7 @@ import {
   Controller,
   Post,
   Get,
+  Delete,
   Query,
   UploadedFile,
   UseInterceptors,
@@ -36,5 +37,15 @@ export class UploadController {
     }
     const url = await this.uploadService.getPresignedUrl(key.trim());
     return { url, expiresIn: '2 minutos', expiresInSeconds: 120 };
+  }
+
+  @Delete()
+  async deleteFile(@Query('key') key: string) {
+    if (!key?.trim()) {
+      throw new BadRequestException('Informe o query param "key" para excluir o arquivo.');
+    }
+
+    const deletedFile = await this.uploadService.deleteFile(key.trim());
+    return { deleted: true, id: deletedFile.id, key: deletedFile.key };
   }
 }
