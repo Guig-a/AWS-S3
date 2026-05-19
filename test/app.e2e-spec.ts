@@ -67,6 +67,7 @@ describe('Upload API (e2e)', () => {
           key: 'uploads/file-1.png',
           originalName: 'avatar.png',
           mimeType: 'image/png',
+          tipoSimples: 'PNG',
           sizeBytes: 2048,
           createdAt: '2026-05-18T12:00:00.000Z',
         },

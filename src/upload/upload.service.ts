@@ -15,11 +15,33 @@ import { PrismaService } from '../prisma/prisma.service';
 
 const PRESIGN_EXPIRES_SECONDS = 120;
 
+/** Corrige nomes com acentos quando o Multer entrega a string em latin1. */
+function decodeOriginalFilename(name: string): string {
+  try {
+    return Buffer.from(name, 'latin1').toString('utf8');
+  } catch {
+    return name;
+  }
+}
+
+function simplificarTipo(mime: string): string {
+  const mapa: Record<string, string> = {
+    'application/pdf': 'PDF',
+    'image/jpeg': 'JPEG',
+    'image/png': 'PNG',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'XLSX',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'DOCX',
+  };
+  return mapa[mime] ?? mime;
+}
+
 type StoredFile = {
   id: string;
   key: string;
   originalName: string;
   mimeType: string;
+  /** Rótulo curto para UI (ex.: XLSX); o MIME completo continua em mimeType. */
+  tipoSimples: string;
   sizeBytes: number;
   createdAt: Date;
 };
@@ -48,9 +70,8 @@ export class UploadService {
   }
 
   async upload(file: Express.Multer.File): Promise<StoredFile> {
-    const ext = file.originalname.includes('.')
-      ? file.originalname.split('.').pop()
-      : '';
+    const originalName = decodeOriginalFilename(file.originalname);
+    const ext = originalName.includes('.') ? originalName.split('.').pop() : '';
     const key = ext ? `uploads/${randomUUID()}.${ext}` : `uploads/${randomUUID()}`;
 
     await this.client.send(
@@ -66,7 +87,7 @@ export class UploadService {
       const asset = await this.prisma.fileAsset.create({
         data: {
           s3Key: key,
-          originalName: file.originalname,
+          originalName,
           mimeType: file.mimetype,
           sizeBytes: file.size,
         },
@@ -186,6 +207,7 @@ export class UploadService {
       key: asset.s3Key,
       originalName: asset.originalName,
       mimeType: asset.mimeType,
+      tipoSimples: simplificarTipo(asset.mimeType),
       sizeBytes: asset.sizeBytes,
       createdAt: asset.createdAt,
     };

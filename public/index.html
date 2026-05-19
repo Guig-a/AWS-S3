@@ -211,9 +211,6 @@
 
       <section aria-labelledby="list-heading">
         <h2 id="list-heading">3 · Listar arquivos</h2>
-        <p class="hint">
-          Filtra por categoria (`image`) ou por MIME type completo (`application/pdf`) e navega pelos registros salvos no banco.
-        </p>
         <div class="stack">
           <div class="inline-fields">
             <div>
@@ -343,17 +340,15 @@
         const meta = document.createElement('div');
         meta.className = 'meta';
         meta.textContent =
-          'Key: ' +
-          file.key +
-          ' | Tipo: ' +
-          file.mimeType +
-          ' | Tamanho: ' +
+          'Tipo: ' +
+          (file.tipoSimples ?? file.mimeType) +
+          ' · Tamanho: ' +
           formatBytes(file.sizeBytes);
-        card.appendChild(meta);
 
         const created = document.createElement('div');
         created.className = 'meta';
         created.textContent = 'Criado em: ' + new Date(file.createdAt).toLocaleString('pt-BR');
+        card.appendChild(meta);
         card.appendChild(created);
 
         const row = document.createElement('div');

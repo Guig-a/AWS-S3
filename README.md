@@ -53,6 +53,7 @@ Resposta:
       "key": "uploads/uuid.ext",
       "originalName": "arquivo.pdf",
       "mimeType": "application/pdf",
+      "tipoSimples": "PDF",
       "sizeBytes": 12345,
       "createdAt": "2026-05-18T15:00:00.000Z"
     }
