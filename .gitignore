@@ -5,7 +5,9 @@
 /coverage
 *.tsbuildinfo
 
-# Variáveis de ambiente 
+# Variáveis de ambiente (nunca commitar credenciais reais)
+# `.env` costuma não ser coberto só por `.env.*`; mantém as duas formas + .ENV no Windows.
+.env
 .env.*
 !.env.example
 .ENV

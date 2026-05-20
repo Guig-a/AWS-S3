@@ -104,6 +104,24 @@ A página servida em `http://localhost:3000/` permite:
 - paginar resultados;
 - excluir registros e objetos.
 
+### Screenshots
+
+Fluxo na página local — enviar arquivo e gerar link temporário:
+
+![Upload e gerar link](./imagens/upload-url.png)
+
+Quando o link expira (~2 min), o S3 devolve erro no browser:
+
+![Link pré-assinado expirado](./imagens/expirado.png)
+
+Listagem de arquivos:
+
+![Listar arquivos na UI](./imagens/listar-arquivos.png)
+
+Suite de testes e2e (`npm run test:e2e`), exemplo de execução:
+
+![Testes e2e](./imagens/e2etest.png)
+
 ## Antes de rodar
 
 - Node instalado
